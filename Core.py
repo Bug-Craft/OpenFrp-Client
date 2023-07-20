@@ -118,6 +118,31 @@ def 启动隧道(密钥, 序号):
     else:
         print('因找不到 frpc 而不能启动隧道。请先运行“install”。')
 
+def 获取节点列表(授权值, 会话值):
+    url = "https://of-dev-api.bfsea.xyz/frp/api/getNodeList"
+    headers = {
+        "Authorization": 授权值
+    }
+    payload = {
+        "session": 会话值
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    data = response.json()
+    return data
+
+def 删除隧道(授权值, 会话值, 隧道序号):
+    url = "https://of-dev-api.bfsea.xyz/frp/api/removeProxy"
+    headers = {
+        "Authorization": 授权值
+    }
+    payload = {
+        "proxy_id": 隧道序号,
+        "session": 会话值
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    data = response.json()
+    return data
+
 def 处理输入():
     已登录 = False
     while True:
@@ -135,7 +160,10 @@ def 处理输入():
     - install | 安装 OpenFrp 的 frpc ，以便启动隧道。
     - signin | 签到，需要你已经登录了 OpenFrp 的账号。
     - about | 关于你的账户，可以获取你账号的一些信息。
-    - proxies | 查看已创建的隧道列表。
+    - proxy | 查看已创建的隧道列表。
+    - node | 查看可用的节点列表。
+    - edit | 创建或者修改一个隧道。
+    - del 隧道序号 | 根据隧道序号删除一个隧道。
     - cls | 清空屏幕，这会清空已输出的内容。'''
             print(帮助)
         elif 分解输入[0] == 'login':
@@ -173,13 +201,13 @@ def 处理输入():
             else:
                 print('这个命令需要一个纯数字的参数。请使用“help”了解正确用法。')
         elif 输入 == 'logout':
-                命令已处理 = True
-                print('登出了你的账号。现在，你可以重新登录。')
-                config['账户相关'] = {'账号': 'test@test.com', '密码': 'test@test.com'}
-                with open(配置文件名, 'w') as configfile:
-                    config.write(configfile)
-                授权值, 会话值 = '', ''
-                已登录 = False
+            命令已处理 = True
+            print('登出了你的账号。现在，你可以重新登录。')
+            config['账户相关'] = {'账号': 'test@test.com', '密码': 'test@test.com'}
+            with open(配置文件名, 'w') as configfile:
+                config.write(configfile)
+            授权值, 会话值 = '', ''
+            已登录 = False
         elif 输入 == 'install':
             命令已处理 = True
             print('正在安装 OpenFrp 的 frpc 。')
@@ -205,11 +233,15 @@ def 处理输入():
                     print('密钥：' + 账户信息['data']['token'])
                     print('权限：' + 账户信息['data']['friendlyGroup'])
                     print('序号：' + str(账户信息['data']['id']))
+                    if 账户信息['data']['realname']:
+                        print('实名：是')
+                    else:
+                        print('实名：否')
                 else:
                     print('无法获取账户信息。')
             else:
                 print('无法获取账户信息，你似乎没有登录诶。')
-        elif 输入 == 'proxies':
+        elif 输入 == 'proxy':
             命令已处理 = True
             if 已登录 == True:
                 隧道列表_json = 获取隧道列表(授权值, 会话值)
@@ -224,7 +256,7 @@ def 处理输入():
                         在线状态 = '\033[1;32m在线\033[0m'
                     else:
                         在线状态 = '\033[1;31m离线\033[0m'
-                    print(f'=====[ {隧道名称} - {在线状态} ]=====')
+                    print(f'=====[ {次数 + 1} - {隧道名称} - {在线状态} ]=====')
                     隧道序号 = str(隧道列表[次数]['id'])
                     print('隧道序号：' + 隧道序号)
                     隧道类型 = str(隧道列表[次数]['proxyType'])
@@ -256,11 +288,134 @@ def 处理输入():
                     次数 = 次数 + 1
             else:
                 print('无法获取隧道列表，你似乎没有登录诶。')
+        elif 输入 == 'node':
+            命令已处理 = True
+            if 已登录 == True:
+                可用节点 = 获取节点列表(授权值, 会话值)
+                可用节点 = 可用节点['data']
+                节点数量 = 可用节点['total']
+                print('节点数量：' + str(节点数量))
+                可用节点 = 可用节点['list']
+                次数 = 0
+                while 次数 != 节点数量:
+                    节点 = 可用节点[次数]
+                    节点序号 = 节点['id']
+                    节点名称 = 节点['name']
+                    if 节点['status'] == 200:
+                        节点状态 = '\033[1;32m正常\033[0m'
+                        if 节点['fullyLoaded']:
+                            节点状态 = '\033[1;31m满载\033[0m'
+                    else:
+                        节点状态 = '\033[1;31m异常\033[0m'
+                    print(f'=====[ {节点序号} - {节点名称} - {节点状态} ]=====')
+                    print('节点描述：' + 节点['description'])
+                    支持协议 = 节点['protocolSupport']
+                    协议列表 = ''
+                    if 支持协议['tcp'] == True:
+                        协议列表 = 协议列表 + 'TCP '
+                    if 支持协议['udp'] == True:
+                        协议列表 = 协议列表 + 'UDP '
+                    if 支持协议['xtcp'] == True:
+                        协议列表 = 协议列表 + 'XTCP '
+                    if 支持协议['stcp'] == True:
+                        协议列表 = 协议列表 + 'STCP '
+                    if 支持协议['http'] == True:
+                        协议列表 = 协议列表 + 'HTTP '
+                    if 支持协议['https'] == True:
+                        协议列表 = 协议列表 + 'HTTPS '
+                    print('支持协议：' + 协议列表)
+                    节点地址 = 节点['hostname']
+                    if 节点地址 == '您无权查询此节点的地址':
+                        节点地址 = '没有权限'
+                    print('节点地址：' + 节点地址)
+                    if 'normal' in 节点['group']:
+                        需要特权 = '否'
+                    else:
+                        需要特权 = '是'
+                    print('需要特权：' + 需要特权)
+                    if 节点['needRealname']:
+                        需要实名 = '是'
+                    else:
+                        需要实名 = '否'
+                    print('需要实名：' + 需要实名)
+                    次数 = 次数 + 1
+            else:
+                print('无法获取节点列表，你似乎没有登录诶。')
+        elif 输入 == 'edit':
+            命令已处理 = True
+            if 命令长度 == 1:
+                节点名称 = input('节点的名字是？')
+                节点序号 = int(input(f'要让 {节点名称} 用什么节点呢（填写节点序号）？'))
+                本地地址 = input('本地地址是什么？')
+                本地端口 = input('本地端口是多少？')
+                远程端口 = input('远程端口是多少？')
+                通信协议 = input('通信协议是什么（tcp/udp/http/https）？')
+                代理序号 = input('隧道序号是什么（创建而非修改隧道时请直接回车）？')
+                url = "https://of-dev-api.bfsea.xyz/frp/api/editProxy"
+                headers = {
+                    "Authorization": 授权值
+                }
+                if 代理序号 == '':
+                    payload = {
+                        "name": 节点名称,
+                        "node_id": 节点序号,
+                        "local_addr": 本地地址,
+                        "local_port": 本地端口,
+                        "remote_port": 远程端口,
+                        "domain_bind": "[]",
+                        "dataGzip": False,
+                        "dataEncrypt": False,
+                        "custom": "",
+                        "type": 通信协议,
+                        "proxy_id": '',
+                        "session": 会话值
+                    }
+                else:
+                    payload = {
+                        "name": 节点名称,
+                        "node_id": 节点序号,
+                        "local_addr": 本地地址,
+                        "local_port": 本地端口,
+                        "remote_port": 远程端口,
+                        "domain_bind": "[]",
+                        "dataGzip": False,
+                        "dataEncrypt": False,
+                        "custom": "",
+                        "type": 通信协议,
+                        "proxy_id": int(代理序号),
+                        "session": 会话值
+                    }
+                response = requests.post(url, headers=headers, json=payload)
+                data = response.json()
+                if data['flag']:
+                    print('修改或创建成功！')
+                else:
+                    print('修改或创建失败。')
+                print('细节：' + data['msg'])
+            else:
+                print('这个命令不是这样用的哦。')
+        elif 分解输入[0] == 'del':
+            命令已处理 = True
+            if 命令长度 == 2 and 分解输入[1].isdigit():
+                if 已登录 == True:
+                    隧道序号 = 分解输入[1]
+                    结果 = 删除隧道(授权值, 会话值, 隧道序号)
+                    if 结果['flag']:
+                        print('删除成功！')
+                        print('细节：' + 结果['msg'])
+                    else:
+                        print('删除失败。')
+                        print('细节：' + 结果['msg'])
+                else:
+                    print('删除隧道前需要先登录。')
+            else:
+                print('这个命令不是这样用的馁。')
         elif 输入 == 'cls':
             命令已处理 = True
             os.system('cls')
         elif 命令已处理 == False:
             print('不太理解你的意思。请使用“help”了解我可以做什么。')
+            命令已处理 = True
 
 输入线程 = threading.Thread(target=处理输入)
 输入线程.start()
